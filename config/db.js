@@ -19,27 +19,12 @@ const connectDB = async () => {
   const uri = process.env.MONGODB_URI;
   const localUri = 'mongodb://127.0.0.1:27017/rbw';
 
-  // Extract hostname from mongodb+srv URI
-  let hostname = '';
   if (uri) {
-    const match = uri.match(/@([^/?#:]+)/);
-    if (match) {
-      hostname = match[1];
-    }
-  }
-
-  let useAtlas = false;
-  if (hostname) {
-    console.log(`Checking DNS resolution for MongoDB Atlas (${hostname})...`);
-    useAtlas = await checkDNS(hostname);
-  }
-
-  if (useAtlas) {
     try {
       console.log(`Connecting to MongoDB Atlas...`);
       await mongoose.connect(uri, {
-        serverSelectionTimeoutMS: 4000,
-        connectTimeoutMS: 4000
+        serverSelectionTimeoutMS: 5000,
+        connectTimeoutMS: 5000
       });
       console.log(`MongoDB Connected (Atlas): ${mongoose.connection.host}`);
       return;
@@ -47,7 +32,7 @@ const connectDB = async () => {
       console.error(`MongoDB Atlas Connection Failed: ${error.message}`);
     }
   } else {
-    console.log(`MongoDB Atlas is unreachable (DNS check failed or timed out). Bypassing Atlas.`);
+    console.log(`MONGODB_URI not defined. Bypassing Atlas.`);
   }
 
   console.log(`Attempting connection to local MongoDB...`);
