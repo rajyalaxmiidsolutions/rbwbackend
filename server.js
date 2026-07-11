@@ -77,7 +77,19 @@ app.get('/api/gallery', async (req, res) => {
 
 // Health check
 app.get('/api/health', (req, res) => {
-  res.status(200).json({ status: 'OK', timestamp: new Date().toISOString() });
+  const mongoose = require('mongoose');
+  const dbState = mongoose.connection.readyState;
+  const states = {
+    0: 'disconnected',
+    1: 'connected',
+    2: 'connecting',
+    3: 'disconnecting'
+  };
+  res.status(200).json({
+    status: 'OK',
+    dbStatus: states[dbState] || 'unknown',
+    timestamp: new Date().toISOString()
+  });
 });
 
 // Error handler
