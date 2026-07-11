@@ -88,6 +88,8 @@ app.get('/api/health', (req, res) => {
   res.status(200).json({
     status: 'OK',
     dbStatus: states[dbState] || 'unknown',
+    mongodbUriDefined: global.mongodbUriDefined || false,
+    dbError: global.dbError || null,
     timestamp: new Date().toISOString()
   });
 });
