@@ -35,23 +35,91 @@ exports.login = async (req, res, next) => {
 // Dashboard stats
 exports.getDashboard = async (req, res, next) => {
   try {
-    const [totalProducts, totalOrders, totalCustomers, totalRevenue, recentOrders] = await Promise.all([
-      Product.countDocuments(),
-      Order.countDocuments(),
-      User.countDocuments({ verified: true }),
+    const { startDate, endDate } = req.query;
+    
+    let dateFilter = {};
+    if (startDate && endDate) {
+      dateFilter = {
+        createdAt: {
+          $gte: new Date(startDate),
+          $lte: new Date(endDate),
+        },
+      };
+    }
+
+    const [
+      totalProducts,
+      ordersCount,
+      newCustomersCount,
+      revenueResult,
+      ordersToConfirm,
+      recentOrders,
+      outOfStockAlerts,
+      outOfStockCount,
+      lowStockAlerts,
+      lowStockCount
+    ] = await Promise.all([
+      // 1. Total active products (ignores date filter)
+      Product.countDocuments({ status: 'active' }),
+      
+      // 2. Orders in date range
+      Order.countDocuments(dateFilter),
+      
+      // 3. New Customers in date range
+      User.countDocuments({ verified: true, ...dateFilter }),
+      
+      // 4. Revenue in date range (only Paid, Confirmed, Shipped, Delivered)
       Order.aggregate([
-        { $match: { orderStatus: { $ne: 'Pending Payment' } } },
+        {
+          $match: {
+            orderStatus: { $in: ['Paid', 'Confirmed', 'Shipped', 'Delivered'] },
+            ...dateFilter,
+          },
+        },
         { $group: { _id: null, total: { $sum: '$totalPrice' } } },
       ]),
-      Order.find().populate('user', 'name email').sort({ createdAt: -1 }).limit(10),
+
+      // 5. Orders to confirm count (ignores date filter)
+      Order.countDocuments({ orderStatus: 'Paid' }),
+
+      // 6. Recent 5 orders (ignores date filter)
+      Order.find()
+        .populate('user', 'name email')
+        .sort({ createdAt: -1 })
+        .limit(5),
+
+      // 7. Out of stock products (ignores date filter)
+      Product.find({ stock: 0 }).limit(5),
+      Product.countDocuments({ stock: 0 }),
+
+      // 8. Low stock products (ignores date filter)
+      Product.find({
+        stock: { $gt: 0 },
+        $expr: { $lte: ['$stock', { $multiply: ['$moq', 2] }] }
+      }).limit(5),
+      Product.countDocuments({
+        stock: { $gt: 0 },
+        $expr: { $lte: ['$stock', { $multiply: ['$moq', 2] }] }
+      }),
     ]);
 
     res.status(200).json({
-      totalProducts,
-      totalOrders,
-      totalCustomers,
-      totalRevenue: totalRevenue[0]?.total || 0,
+      kpis: {
+        totalProducts,
+        orders: ordersCount,
+        newCustomers: newCustomersCount,
+        revenue: revenueResult[0]?.total || 0,
+      },
+      needsAttention: {
+        ordersToConfirm,
+      },
       recentOrders,
+      stockAlerts: {
+        outOfStock: outOfStockAlerts,
+        outOfStockCount,
+        lowStock: lowStockAlerts,
+        lowStockCount,
+      },
     });
   } catch (error) {
     next(error);
@@ -333,20 +401,111 @@ exports.deleteTestimonial = async (req, res, next) => {
 
 exports.getAllOrders = async (req, res, next) => {
   try {
-    const { page = 1, limit = 20, status, search } = req.query;
-    const query = {};
-    if (status) query.orderStatus = status;
+    const { page = 1, limit = 20, status, search, startDate, endDate } = req.query;
+    
+    // 1. Build search criteria
+    let searchCriteria = {};
+    if (search && search.trim() !== '') {
+      const cleanSearch = search.trim();
+      const User = require('../models/User');
+      const Product = require('../models/Product');
+      
+      const matchingUsers = await User.find({
+        $or: [
+          { name: { $regex: cleanSearch, $options: 'i' } },
+          { email: { $regex: cleanSearch, $options: 'i' } }
+        ]
+      }, '_id');
+      const userIds = matchingUsers.map(u => u._id);
 
-    const skip = (Number(page) - 1) * Number(limit);
+      const matchingProducts = await Product.find({
+        name: { $regex: cleanSearch, $options: 'i' }
+      }, '_id');
+      const productIds = matchingProducts.map(p => p._id);
 
-    let orders = Order.find(query).populate('user', 'name email phone businessName').sort({ createdAt: -1 });
+      const orConditions = [
+        { user: { $in: userIds } },
+        { 'products.product': { $in: productIds } },
+        { paymentMethod: { $regex: cleanSearch, $options: 'i' } },
+        { orderStatus: { $regex: cleanSearch, $options: 'i' } }
+      ];
 
-    const [results, total] = await Promise.all([
-      orders.skip(skip).limit(Number(limit)),
-      Order.countDocuments(query),
+      orConditions.push({
+        $expr: {
+          $regexMatch: {
+            input: { $toString: '$_id' },
+            regex: cleanSearch,
+            options: 'i'
+          }
+        }
+      });
+
+      const searchNum = Number(cleanSearch);
+      if (!isNaN(searchNum)) {
+        orConditions.push({ totalPrice: searchNum });
+      }
+
+      searchCriteria = { $or: orConditions };
+    }
+
+    // 2. Build date criteria (ignored if search exists)
+    let dateCriteria = {};
+    if ((!search || search.trim() === '') && startDate && endDate) {
+      dateCriteria = {
+        createdAt: {
+          $gte: new Date(startDate),
+          $lte: new Date(endDate)
+        }
+      };
+    }
+
+    // 3. Status counts query (date criteria + search criteria)
+    const countQuery = { ...dateCriteria, ...searchCriteria };
+    const [
+      allCount,
+      pendingPaymentCount,
+      paidCount,
+      confirmedCount,
+      shippedCount,
+      deliveredCount
+    ] = await Promise.all([
+      Order.countDocuments(countQuery),
+      Order.countDocuments({ ...countQuery, orderStatus: 'Pending Payment' }),
+      Order.countDocuments({ ...countQuery, orderStatus: 'Paid' }),
+      Order.countDocuments({ ...countQuery, orderStatus: 'Confirmed' }),
+      Order.countDocuments({ ...countQuery, orderStatus: 'Shipped' }),
+      Order.countDocuments({ ...countQuery, orderStatus: 'Delivered' }),
     ]);
 
-    res.status(200).json({ orders: results, totalPages: Math.ceil(total / Number(limit)), total });
+    // 4. Build final query for records
+    const finalQuery = { ...countQuery };
+    if (status && status !== 'All') {
+      finalQuery.orderStatus = status;
+    }
+
+    const skip = (Number(page) - 1) * Number(limit);
+    const total = await Order.countDocuments(finalQuery);
+
+    const orders = await Order.find(finalQuery)
+      .populate('user', 'name email phone businessName')
+      .populate('products.product', 'name price')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(Number(limit));
+
+    res.status(200).json({
+      orders,
+      totalPages: Math.ceil(total / Number(limit)),
+      total,
+      statusCounts: {
+        All: allCount,
+        'Pending Payment': pendingPaymentCount,
+        Paid: paidCount,
+        Confirmed: confirmedCount,
+        Shipped: shippedCount,
+        Delivered: deliveredCount,
+      }
+    });
   } catch (error) {
     next(error);
   }
