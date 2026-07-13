@@ -407,6 +407,7 @@ exports.getCustomers = async (req, res, next) => {
         { name: { $regex: search, $options: 'i' } },
         { email: { $regex: search, $options: 'i' } },
         { businessName: { $regex: search, $options: 'i' } },
+        { businessLocation: { $regex: search, $options: 'i' } },
       ];
     }
 
@@ -424,7 +425,7 @@ exports.getCustomers = async (req, res, next) => {
 
 exports.createCustomer = async (req, res, next) => {
   try {
-    const { name, phone, email, password, businessName, gstNumber } = req.body;
+    const { name, phone, email, password, businessName, businessLocation, gstNumber } = req.body;
 
     const existingUser = await User.findOne({ email: email.toLowerCase() });
     if (existingUser) {
@@ -437,6 +438,7 @@ exports.createCustomer = async (req, res, next) => {
       email: email.toLowerCase(),
       password,
       businessName: businessName || '',
+      businessLocation: businessLocation || '',
       gstNumber: gstNumber || '',
       verified: false
     });
@@ -449,6 +451,7 @@ exports.createCustomer = async (req, res, next) => {
         email: customer.email,
         phone: customer.phone,
         businessName: customer.businessName,
+        businessLocation: customer.businessLocation,
         gstNumber: customer.gstNumber,
         verified: customer.verified
       }
@@ -460,7 +463,7 @@ exports.createCustomer = async (req, res, next) => {
 
 exports.updateCustomer = async (req, res, next) => {
   try {
-    const { name, phone, email, password, businessName, gstNumber } = req.body;
+    const { name, phone, email, password, businessName, businessLocation, gstNumber } = req.body;
     
     const customer = await User.findById(req.params.id);
     if (!customer) {
@@ -478,6 +481,7 @@ exports.updateCustomer = async (req, res, next) => {
     if (name) customer.name = name;
     if (phone) customer.phone = phone;
     if (businessName !== undefined) customer.businessName = businessName;
+    if (businessLocation !== undefined) customer.businessLocation = businessLocation;
     if (gstNumber !== undefined) customer.gstNumber = gstNumber;
     if (password) customer.password = password;
 
@@ -491,6 +495,7 @@ exports.updateCustomer = async (req, res, next) => {
         email: customer.email,
         phone: customer.phone,
         businessName: customer.businessName,
+        businessLocation: customer.businessLocation,
         gstNumber: customer.gstNumber,
         verified: customer.verified
       }

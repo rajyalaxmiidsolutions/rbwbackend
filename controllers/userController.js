@@ -13,10 +13,10 @@ exports.getProfile = async (req, res, next) => {
 // Update profile
 exports.updateProfile = async (req, res, next) => {
   try {
-    const { name, phone, businessName, gstNumber } = req.body;
+    const { name, phone, businessName, businessLocation, gstNumber } = req.body;
     const user = await User.findByIdAndUpdate(
       req.user._id,
-      { name, phone, businessName, gstNumber },
+      { name, phone, businessName, businessLocation, gstNumber },
       { new: true, runValidators: true }
     );
     res.status(200).json(user);

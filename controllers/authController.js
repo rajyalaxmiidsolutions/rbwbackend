@@ -44,6 +44,7 @@ exports.verifyOTP = async (req, res, next) => {
         email: user.email,
         phone: user.phone,
         businessName: user.businessName,
+        businessLocation: user.businessLocation,
         verified: user.verified,
       },
     });
@@ -125,6 +126,7 @@ exports.login = async (req, res, next) => {
         email: user.email,
         phone: user.phone,
         businessName: user.businessName,
+        businessLocation: user.businessLocation,
         gstNumber: user.gstNumber,
         verified: user.verified,
         addresses: user.addresses,

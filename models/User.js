@@ -38,6 +38,11 @@ const userSchema = new mongoose.Schema({
     trim: true,
     default: '',
   },
+  businessLocation: {
+    type: String,
+    trim: true,
+    default: '',
+  },
   gstNumber: {
     type: String,
     trim: true,
