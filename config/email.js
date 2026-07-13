@@ -12,10 +12,17 @@ const transporter = nodemailer.createTransport({
 });
 
 // Verify transporter on startup
+global.emailStatus = 'verifying';
+global.emailError = null;
+
 transporter.verify((error) => {
   if (error) {
+    global.emailStatus = 'error';
+    global.emailError = error.message;
     console.error('Email transporter error:', error.message);
   } else {
+    global.emailStatus = 'ready';
+    global.emailError = null;
     console.log('Email transporter ready');
   }
 });

@@ -96,6 +96,10 @@ app.get('/api/health', (req, res) => {
     dbStatus: states[dbState] || 'unknown',
     mongodbUriDefined: global.mongodbUriDefined || false,
     dbError: global.dbError || null,
+    emailStatus: global.emailStatus || 'unknown',
+    emailError: global.emailError || null,
+    emailUserDefined: !!process.env.EMAIL_USER,
+    emailPassDefined: !!process.env.EMAIL_PASS,
     timestamp: new Date().toISOString()
   });
 });
