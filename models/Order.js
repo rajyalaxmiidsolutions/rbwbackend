@@ -62,7 +62,6 @@ const orderSchema = new mongoose.Schema({
       'Confirmed',
       'Shipped',
       'Delivered',
-      'Cancelled',
     ],
     default: 'Pending Payment',
   },

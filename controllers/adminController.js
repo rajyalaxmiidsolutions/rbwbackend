@@ -40,7 +40,7 @@ exports.getDashboard = async (req, res, next) => {
       Order.countDocuments(),
       User.countDocuments({ verified: true }),
       Order.aggregate([
-        { $match: { orderStatus: { $ne: 'Cancelled' } } },
+        { $match: { orderStatus: { $ne: 'Pending Payment' } } },
         { $group: { _id: null, total: { $sum: '$totalPrice' } } },
       ]),
       Order.find().populate('user', 'name email').sort({ createdAt: -1 }).limit(10),
