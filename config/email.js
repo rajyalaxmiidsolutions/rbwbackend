@@ -15,16 +15,24 @@ const transporter = nodemailer.createTransport({
 global.emailStatus = 'verifying';
 global.emailError = null;
 
-transporter.verify((error) => {
-  if (error) {
-    global.emailStatus = 'error';
-    global.emailError = error.message;
-    console.error('Email transporter error:', error.message);
-  } else {
-    global.emailStatus = 'ready';
-    global.emailError = null;
-    console.log('Email transporter ready');
-  }
-});
+if (process.env.RESEND_API_KEY) {
+  global.emailStatus = 'ready';
+  global.emailError = null;
+  global.emailService = 'resend';
+  console.log('Email service: Resend API ready');
+} else {
+  global.emailService = 'smtp';
+  transporter.verify((error) => {
+    if (error) {
+      global.emailStatus = 'error';
+      global.emailError = error.message;
+      console.error('Email transporter error:', error.message);
+    } else {
+      global.emailStatus = 'ready';
+      global.emailError = null;
+      console.log('Email transporter ready');
+    }
+  });
+}
 
 module.exports = transporter;

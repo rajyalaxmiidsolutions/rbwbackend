@@ -1,30 +1,80 @@
 const transporter = require('../config/email');
 
 const sendEmail = async (to, subject, html, attachments = []) => {
-  const mailOptions = {
-    from: `"Rajyalaxmi Binding Works" <${process.env.EMAIL_USER}>`,
-    to,
-    subject,
-    html,
-    attachments,
-  };
+  if (process.env.RESEND_API_KEY) {
+    try {
+      const fromEmail = process.env.RESEND_FROM || 'onboarding@resend.dev';
+      const attachmentsPayload = [];
+      if (attachments && attachments.length > 0) {
+        for (const att of attachments) {
+          attachmentsPayload.push({
+            filename: att.filename,
+            content: att.content.toString('base64'),
+          });
+        }
+      }
 
-  try {
-    await transporter.sendMail(mailOptions);
-  } catch (error) {
-    console.error(`--- EMAIL SENDING FAILED ---`);
-    console.error(`To: ${to}`);
-    console.error(`Subject: ${subject}`);
-    console.error(`Error: ${error.message}`);
-    // Extract OTP if present in the HTML content
-    const otpMatch = html.match(/>\s*([0-9]{4,6})\s*</);
-    if (otpMatch) {
-      console.log(`\n=========================================`);
-      console.log(`[DEVELOPER NOTICE] GENERATED OTP FOR ${to} IS: ${otpMatch[1]}`);
-      console.log(`=========================================\n`);
+      const response = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          from: `"Rajyalaxmi Binding Works" <${fromEmail}>`,
+          to,
+          subject,
+          html,
+          attachments: attachmentsPayload.length > 0 ? attachmentsPayload : undefined,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `Resend API returned status ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log(`[Resend Email Sent] To: ${to}, ID: ${data.id}`);
+    } catch (error) {
+      console.error(`--- EMAIL SENDING FAILED (RESEND) ---`);
+      console.error(`To: ${to}`);
+      console.error(`Subject: ${subject}`);
+      console.error(`Error: ${error.message}`);
+      // Extract OTP if present in the HTML content
+      const otpMatch = html.match(/>\s*([0-9]{4,6})\s*</);
+      if (otpMatch) {
+        console.log(`\n=========================================`);
+        console.log(`[DEVELOPER NOTICE] GENERATED OTP FOR ${to} IS: ${otpMatch[1]}`);
+        console.log(`=========================================\n`);
+      }
+      console.error(`----------------------------`);
     }
-    console.error(`----------------------------`);
-    // Do not throw the error so that the registration/forgot password flow doesn't break when offline
+  } else {
+    const mailOptions = {
+      from: `"Rajyalaxmi Binding Works" <${process.env.EMAIL_USER}>`,
+      to,
+      subject,
+      html,
+      attachments,
+    };
+
+    try {
+      await transporter.sendMail(mailOptions);
+    } catch (error) {
+      console.error(`--- EMAIL SENDING FAILED (SMTP) ---`);
+      console.error(`To: ${to}`);
+      console.error(`Subject: ${subject}`);
+      console.error(`Error: ${error.message}`);
+      // Extract OTP if present in the HTML content
+      const otpMatch = html.match(/>\s*([0-9]{4,6})\s*</);
+      if (otpMatch) {
+        console.log(`\n=========================================`);
+        console.log(`[DEVELOPER NOTICE] GENERATED OTP FOR ${to} IS: ${otpMatch[1]}`);
+        console.log(`=========================================\n`);
+      }
+      console.error(`----------------------------`);
+    }
   }
 };
 
