@@ -7,7 +7,7 @@
  * Run with: node backend/scripts/migrateOrders.js
  */
 const path = require('path');
-require('dotenv').config({ path: path.join(__dirname, '..', '..', '.env') });
+require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 const mongoose = require('mongoose');
 const connectDB = require('../config/db');
 
