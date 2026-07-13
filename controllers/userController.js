@@ -1,4 +1,5 @@
 const User = require('../models/User');
+const Testimonial = require('../models/Testimonial');
 
 // Get profile
 exports.getProfile = async (req, res, next) => {
@@ -46,6 +47,33 @@ exports.deleteAddress = async (req, res, next) => {
     );
     await user.save();
     res.status(200).json(user.addresses);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Submit testimonial
+exports.submitTestimonial = async (req, res, next) => {
+  try {
+    const { text, rating } = req.body;
+    if (!text) {
+      return res.status(400).json({ message: 'Review text is required' });
+    }
+    
+    const user = await User.findById(req.user._id);
+    
+    const testimonial = await Testimonial.create({
+      name: user.name,
+      business: user.businessName || '',
+      text,
+      rating: Number(rating) || 5,
+      isActive: false // Hidden by default, admin must approve/activate it
+    });
+
+    res.status(201).json({
+      message: 'Thank you for your feedback! Your review has been submitted for admin approval.',
+      testimonial
+    });
   } catch (error) {
     next(error);
   }
