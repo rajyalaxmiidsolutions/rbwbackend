@@ -3,7 +3,7 @@ const transporter = require('../config/email');
 const sendEmail = async (to, subject, html, attachments = []) => {
   if (process.env.BREVO_API_KEY) {
     try {
-      const fromEmail = process.env.EMAIL_USER || 'support.rajyalaxmibindingworks@gmail.com';
+      const fromEmail = process.env.BREVO_SENDER || 'rajyalaxmi.idsolutions@gmail.com';
       const attachmentPayload = [];
       if (attachments && attachments.length > 0) {
         for (const att of attachments) {
