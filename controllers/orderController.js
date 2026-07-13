@@ -58,63 +58,25 @@ exports.placeOrder = async (req, res, next) => {
       productTotal,
       shippingCharge,
       totalPrice,
-      orderStatus: paymentMethod === 'COD' ? 'Paid' : 'Pending Payment',
+      orderStatus: 'Pending Payment',
     });
 
-    if (paymentMethod === 'Razorpay') {
-      // Create Razorpay order for full amount (product + shipping)
-      const options = {
-        amount: Math.round(totalPrice * 100), // amount in paise
-        currency: 'INR',
-        receipt: `order_${order._id.toString()}`,
-      };
+    // Create Razorpay order for full amount (product + shipping)
+    const options = {
+      amount: Math.round(totalPrice * 100), // amount in paise
+      currency: 'INR',
+      receipt: `order_${order._id.toString()}`,
+    };
 
-      const razorpayOrder = await razorpay.orders.create(options);
+    const razorpayOrder = await razorpay.orders.create(options);
 
-      order.payment.razorpayOrderId = razorpayOrder.id;
-      await order.save();
+    order.payment.razorpayOrderId = razorpayOrder.id;
+    await order.save();
 
-      return res.status(201).json({
-        message: 'Razorpay order created',
-        order,
-        razorpayOrder,
-      });
-    }
-
-    // COD — order goes directly to "Paid" status
-    await Cart.findOneAndDelete({ user: req.user._id });
-
-    // Reduce stock
-    for (const item of order.products) {
-      await Product.findByIdAndUpdate(item.product, {
-        $inc: { stock: -item.quantity },
-      });
-    }
-
-    // Send order received email
-    try {
-      await sendOrderReceivedEmail(shippingAddress.email, order);
-    } catch (emailErr) {
-      console.error('Order received email failed:', emailErr.message);
-    }
-
-    // Send admin order notification email
-    try {
-      const admins = await Admin.find({}, 'email');
-      const adminEmails = admins.map(a => a.email);
-      if (adminEmails.length === 0) {
-        adminEmails.push(process.env.EMAIL_USER);
-      }
-      for (const email of adminEmails) {
-        await sendAdminOrderPlacedEmail(email, order);
-      }
-    } catch (emailErr) {
-      console.error('Admin order placement notification email failed:', emailErr.message);
-    }
-
-    res.status(201).json({
-      message: 'Order placed successfully (COD)',
+    return res.status(201).json({
+      message: 'Razorpay order created',
       order,
+      razorpayOrder,
     });
   } catch (error) {
     next(error);
