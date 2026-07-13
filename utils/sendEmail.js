@@ -1,7 +1,64 @@
 const transporter = require('../config/email');
 
 const sendEmail = async (to, subject, html, attachments = []) => {
-  if (process.env.RESEND_API_KEY) {
+  if (process.env.BREVO_API_KEY) {
+    try {
+      const fromEmail = process.env.EMAIL_USER || 'support.rajyalaxmibindingworks@gmail.com';
+      const attachmentPayload = [];
+      if (attachments && attachments.length > 0) {
+        for (const att of attachments) {
+          attachmentPayload.push({
+            name: att.filename,
+            content: att.content.toString('base64'),
+          });
+        }
+      }
+
+      const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: {
+          'api-key': process.env.BREVO_API_KEY,
+          'Content-Type': 'application/json',
+          'accept': 'application/json',
+        },
+        body: JSON.stringify({
+          sender: {
+            name: 'Rajyalaxmi Binding Works',
+            email: fromEmail,
+          },
+          to: [
+            {
+              email: to,
+            }
+          ],
+          subject,
+          htmlContent: html,
+          attachment: attachmentPayload.length > 0 ? attachmentPayload : undefined,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `Brevo API returned status ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log(`[Brevo Email Sent] To: ${to}, Message ID: ${data.messageId}`);
+    } catch (error) {
+      console.error(`--- EMAIL SENDING FAILED (BREVO) ---`);
+      console.error(`To: ${to}`);
+      console.error(`Subject: ${subject}`);
+      console.error(`Error: ${error.message}`);
+      // Extract OTP if present in the HTML content
+      const otpMatch = html.match(/>\s*([0-9]{4,6})\s*</);
+      if (otpMatch) {
+        console.log(`\n=========================================`);
+        console.log(`[DEVELOPER NOTICE] GENERATED OTP FOR ${to} IS: ${otpMatch[1]}`);
+        console.log(`=========================================\n`);
+      }
+      console.error(`----------------------------`);
+    }
+  } else if (process.env.RESEND_API_KEY) {
     try {
       const fromEmail = process.env.RESEND_FROM || 'onboarding@resend.dev';
       const attachmentsPayload = [];

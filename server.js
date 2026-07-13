@@ -96,10 +96,13 @@ app.get('/api/health', (req, res) => {
     dbStatus: states[dbState] || 'unknown',
     mongodbUriDefined: global.mongodbUriDefined || false,
     dbError: global.dbError || null,
+    emailService: global.emailService || 'unknown',
     emailStatus: global.emailStatus || 'unknown',
     emailError: global.emailError || null,
     emailUserDefined: !!process.env.EMAIL_USER,
     emailPassDefined: !!process.env.EMAIL_PASS,
+    brevoApiKeyDefined: !!process.env.BREVO_API_KEY,
+    resendApiKeyDefined: !!process.env.RESEND_API_KEY,
     timestamp: new Date().toISOString()
   });
 });

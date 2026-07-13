@@ -15,7 +15,12 @@ const transporter = nodemailer.createTransport({
 global.emailStatus = 'verifying';
 global.emailError = null;
 
-if (process.env.RESEND_API_KEY) {
+if (process.env.BREVO_API_KEY) {
+  global.emailStatus = 'ready';
+  global.emailError = null;
+  global.emailService = 'brevo';
+  console.log('Email service: Brevo API ready');
+} else if (process.env.RESEND_API_KEY) {
   global.emailStatus = 'ready';
   global.emailError = null;
   global.emailService = 'resend';
