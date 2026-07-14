@@ -118,6 +118,8 @@ app.get('/api/health', (req, res) => {
     brevoApiKeyDefined: !!process.env.BREVO_API_KEY,
     resendApiKeyDefined: !!process.env.RESEND_API_KEY,
     vapidKeysDefined: !!process.env.VAPID_PUBLIC_KEY && !!process.env.VAPID_PRIVATE_KEY,
+    razorpayKeyIdDefined: !!process.env.RAZORPAY_KEY_ID,
+    razorpayKeySecretDefined: !!process.env.RAZORPAY_KEY_SECRET,
     timestamp: new Date().toISOString()
   });
 });
