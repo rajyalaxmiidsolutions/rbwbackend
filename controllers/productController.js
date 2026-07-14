@@ -32,7 +32,8 @@ exports.getProducts = async (req, res, next) => {
         .populate('category', 'name slug')
         .sort(sortOption)
         .skip(skip)
-        .limit(Number(limit)),
+        .limit(Number(limit))
+        .lean(),
       Product.countDocuments(query),
     ]);
 
@@ -50,7 +51,7 @@ exports.getProducts = async (req, res, next) => {
 // Get single product
 exports.getProduct = async (req, res, next) => {
   try {
-    const product = await Product.findById(req.params.id).populate('category', 'name slug');
+    const product = await Product.findById(req.params.id).populate('category', 'name slug').lean();
     if (!product) {
       return res.status(404).json({ message: 'Product not found' });
     }
@@ -74,7 +75,8 @@ exports.getRelatedProducts = async (req, res, next) => {
       status: 'active',
     })
       .populate('category', 'name slug')
-      .limit(4);
+      .limit(4)
+      .lean();
 
     res.status(200).json(related);
   } catch (error) {

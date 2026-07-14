@@ -95,17 +95,18 @@ exports.getDashboard = async (req, res, next) => {
       Order.find()
         .populate('user', 'name email')
         .sort({ createdAt: -1 })
-        .limit(5),
+        .limit(5)
+        .lean(),
 
       // 7. Out of stock products (ignores date filter)
-      Product.find({ stock: 0 }).limit(5),
+      Product.find({ stock: 0 }).limit(5).lean(),
       Product.countDocuments({ stock: 0 }),
 
       // 8. Low stock products (ignores date filter)
       Product.find({
         stock: { $gt: 0 },
         $expr: { $lte: ['$stock', { $multiply: ['$moq', 2] }] }
-      }).limit(5),
+      }).limit(5).lean(),
       Product.countDocuments({
         stock: { $gt: 0 },
         $expr: { $lte: ['$stock', { $multiply: ['$moq', 2] }] }
@@ -230,7 +231,7 @@ exports.getAllProducts = async (req, res, next) => {
 
     const skip = (Number(page) - 1) * Number(limit);
     const [products, total] = await Promise.all([
-      Product.find(query).populate('category', 'name').sort({ createdAt: -1 }).skip(skip).limit(Number(limit)),
+      Product.find(query).populate('category', 'name').sort({ createdAt: -1 }).skip(skip).limit(Number(limit)).lean(),
       Product.countDocuments(query),
     ]);
 
@@ -500,7 +501,8 @@ exports.getAllOrders = async (req, res, next) => {
       .populate('products.product', 'name price')
       .sort({ createdAt: -1 })
       .skip(skip)
-      .limit(Number(limit));
+      .limit(Number(limit))
+      .lean();
 
     res.status(200).json({
       orders,
@@ -648,7 +650,7 @@ exports.getCustomers = async (req, res, next) => {
 
     const skip = (Number(page) - 1) * Number(limit);
     const [customers, total] = await Promise.all([
-      User.find(query).select('-password').sort({ createdAt: -1 }).skip(skip).limit(Number(limit)),
+      User.find(query).select('-password').sort({ createdAt: -1 }).skip(skip).limit(Number(limit)).lean(),
       User.countDocuments(query),
     ]);
 
