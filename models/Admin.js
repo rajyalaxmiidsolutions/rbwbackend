@@ -25,6 +25,32 @@ const adminSchema = new mongoose.Schema({
     default: 'admin',
     enum: ['admin', 'superadmin'],
   },
+  phone: {
+    type: String,
+    default: () => process.env.BOSS_ADMIN_PHONE || '',
+  },
+  otpEnabled: {
+    type: Boolean,
+    default: true,
+  },
+  emergencyApproverEmail: {
+    type: String,
+    default: () => process.env.EMERGENCY_APPROVER_EMAIL || '',
+  },
+  maintenanceMode: {
+    type: Boolean,
+    default: false,
+  },
+  maintenanceMessage: {
+    type: String,
+    default: 'We are temporarily unable to accept new orders. Please try again later.',
+  },
+  activeDevices: [{
+    token: { type: String, required: true },
+    deviceInfo: { type: String, default: 'Unknown Device' },
+    ip: { type: String, default: '' },
+    lastActive: { type: Date, default: Date.now },
+  }],
 }, {
   timestamps: true,
 });

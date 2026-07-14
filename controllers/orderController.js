@@ -17,6 +17,15 @@ const razorpay = new Razorpay({
 // Place order — single payment (product + shipping)
 exports.placeOrder = async (req, res, next) => {
   try {
+    // Enforce Maintenance Mode block on new order creation
+    const Admin = require('../models/Admin');
+    const admin = await Admin.findOne();
+    if (admin && admin.maintenanceMode) {
+      return res.status(503).json({
+        message: admin.maintenanceMessage || 'We are temporarily unable to accept new orders. Please try again later.'
+      });
+    }
+
     const { shippingAddress, paymentMethod, locationId } = req.body;
 
     const cart = await Cart.findOne({ user: req.user._id }).populate('items.product');

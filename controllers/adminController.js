@@ -11,6 +11,26 @@ const generateToken = require('../utils/generateToken');
 const { sendOrderDeliveredEmailWithPdf } = require('../utils/sendEmail');
 const { generateInvoicePDF } = require('../utils/pdfGenerator');
 
+// Parse user agent to friendly name
+const parseUserAgent = (ua) => {
+  if (!ua) return 'Unknown Device';
+  let os = 'Unknown OS';
+  let browser = 'Unknown Browser';
+  
+  if (ua.includes('Windows')) os = 'Windows';
+  else if (ua.includes('Macintosh')) os = 'macOS';
+  else if (ua.includes('iPhone') || ua.includes('iPad')) os = 'iOS';
+  else if (ua.includes('Android')) os = 'Android';
+  else if (ua.includes('Linux')) os = 'Linux';
+
+  if (ua.includes('Chrome')) browser = 'Chrome';
+  else if (ua.includes('Safari') && !ua.includes('Chrome')) browser = 'Safari';
+  else if (ua.includes('Firefox')) browser = 'Firefox';
+  else if (ua.includes('Edg')) browser = 'Edge';
+
+  return `${browser} on ${os}`;
+};
+
 // Admin login
 exports.login = async (req, res, next) => {
   try {
@@ -25,7 +45,27 @@ exports.login = async (req, res, next) => {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
+    // Stale session clean-up (7 days expiration)
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    admin.activeDevices = admin.activeDevices.filter(d => d.lastActive > sevenDaysAgo);
+
+    // Limit active sessions/devices to 3
+    if (admin.activeDevices.length >= 3) {
+      return res.status(400).json({
+        message: 'Maximum device limit reached (3 active sessions). Please logout from another device first.'
+      });
+    }
+
     const token = generateToken(admin._id, admin.role);
+
+    // Register active device session
+    admin.activeDevices.push({
+      token,
+      deviceInfo: parseUserAgent(req.headers['user-agent']),
+      ip: req.ip || req.connection.remoteAddress || '',
+      lastActive: new Date()
+    });
+    await admin.save();
 
     // Set secure httpOnly cookie
     res.cookie('token', token, {
@@ -767,16 +807,45 @@ exports.getCustomerOrders = async (req, res, next) => {
 
 exports.seedAdmin = async (req, res, next) => {
   try {
-    const existing = await Admin.findOne({ email: 'admin@rbw.com' });
-    if (existing) return res.status(200).json({ message: 'Admin already exists' });
+    const bossEmail = process.env.BOSS_ADMIN_EMAIL || 'rajyalaxmi.idsolutions@gmail.com';
+    const bossPhone = process.env.BOSS_ADMIN_PHONE || '7013518131';
+    const emergencyEmail = process.env.EMERGENCY_APPROVER_EMAIL || 'koushikchava77@gmail.com';
 
-    await Admin.create({
-      name: 'RBW Admin',
-      email: 'admin@rbw.com',
-      password: 'admin123456',
-      role: 'superadmin',
+    let seededCount = 0;
+
+    // Seed default fallback admin if missing
+    const defaultAdmin = await Admin.findOne({ email: 'admin@rbw.com' });
+    if (!defaultAdmin) {
+      await Admin.create({
+        name: 'RBW Admin',
+        email: 'admin@rbw.com',
+        password: 'admin123456',
+        role: 'superadmin',
+      });
+      seededCount++;
+    }
+
+    // Seed Boss Admin if missing
+    const bossAdmin = await Admin.findOne({ email: bossEmail.toLowerCase() });
+    if (!bossAdmin) {
+      await Admin.create({
+        name: 'Boss Admin',
+        email: bossEmail.toLowerCase(),
+        password: 'admin123456',
+        role: 'superadmin',
+        phone: bossPhone,
+        emergencyApproverEmail: emergencyEmail,
+      });
+      seededCount++;
+    }
+
+    if (seededCount === 0) {
+      return res.status(200).json({ message: 'Admin accounts already configured.' });
+    }
+
+    res.status(201).json({
+      message: `Seeded ${seededCount} admin account(s). Boss Admin: ${bossEmail} / admin123456`
     });
-    res.status(201).json({ message: 'Admin created — email: admin@rbw.com, password: admin123456' });
   } catch (error) {
     next(error);
   }
@@ -906,6 +975,196 @@ exports.deleteGalleryPhoto = async (req, res, next) => {
 
     await Gallery.findByIdAndDelete(req.params.id);
     res.status(200).json({ message: 'Gallery photo deleted successfully' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// --- STORE CONTROLS & SECURITY SETTINGS ---
+
+// Get public store status (maintenance mode)
+exports.getStoreStatus = async (req, res, next) => {
+  try {
+    const admin = await Admin.findOne();
+    res.status(200).json({
+      maintenanceMode: admin ? admin.maintenanceMode : false,
+      maintenanceMessage: admin ? admin.maintenanceMessage : '',
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Get all admin settings (protected)
+exports.getSettings = async (req, res, next) => {
+  try {
+    const admin = req.admin;
+    res.status(200).json({
+      name: admin.name,
+      email: admin.email,
+      phone: admin.phone || '',
+      otpEnabled: admin.otpEnabled,
+      emergencyApproverEmail: admin.emergencyApproverEmail || '',
+      maintenanceMode: admin.maintenanceMode,
+      maintenanceMessage: admin.maintenanceMessage || '',
+      activeDevices: admin.activeDevices.map(d => ({
+        _id: d._id,
+        deviceInfo: d.deviceInfo,
+        ip: d.ip,
+        lastActive: d.lastActive,
+        isCurrent: d.token === (req.cookies?.token || req.header('Authorization')?.replace('Bearer ', ''))
+      }))
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Send OTP to registered Emergency Approver
+exports.requestEmergencyOTP = async (req, res, next) => {
+  try {
+    const admin = req.admin;
+    const emergencyEmail = admin.emergencyApproverEmail || process.env.EMERGENCY_APPROVER_EMAIL;
+    if (!emergencyEmail) {
+      return res.status(400).json({ message: 'No Emergency Approver email configured' });
+    }
+
+    const OTP = require('../models/OTP');
+    const { sendOTPEmail } = require('../utils/sendEmail');
+
+    // Generate 6 digit numeric code
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+    // Check cooldown/rate limits
+    const existing = await OTP.findOne({ email: emergencyEmail.toLowerCase(), purpose: 'emergency' }).sort({ createdAt: -1 });
+    if (existing && (Date.now() - new Date(existing.createdAt).getTime() < 60000)) {
+      return res.status(400).json({ message: 'Please wait 60 seconds before requesting another OTP.' });
+    }
+
+    // Save/refresh OTP
+    await OTP.deleteMany({ email: emergencyEmail.toLowerCase(), purpose: 'emergency' });
+    await OTP.create({
+      email: emergencyEmail.toLowerCase(),
+      otp,
+      purpose: 'emergency',
+      expiresAt: new Date(Date.now() + 5 * 60 * 1000) // 5 minutes expiration
+    });
+
+    await sendOTPEmail(emergencyEmail, otp, 'emergency');
+    res.status(200).json({ message: `Verification code successfully sent to Emergency Approver` });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Update Settings (with optional Emergency OTP check)
+exports.updateSettings = async (req, res, next) => {
+  try {
+    const admin = req.admin;
+    const { email, phone, otpEnabled, emergencyApproverEmail, maintenanceMode, maintenanceMessage, otp } = req.body;
+
+    const criticalChanges = [];
+    if (email && email.toLowerCase() !== admin.email.toLowerCase()) criticalChanges.push('email');
+    if (phone !== undefined && phone !== admin.phone) criticalChanges.push('phone');
+    if (otpEnabled !== undefined && otpEnabled !== admin.otpEnabled) criticalChanges.push('otpEnabled');
+    if (emergencyApproverEmail && emergencyApproverEmail.toLowerCase() !== (admin.emergencyApproverEmail || '').toLowerCase()) criticalChanges.push('emergencyApproverEmail');
+
+    // Enforce Emergency Approver OTP check on backend
+    if (criticalChanges.length > 0) {
+      if (!otp) {
+        return res.status(400).json({ message: 'Emergency Approval OTP is required to save these changes.', otpRequired: true });
+      }
+
+      const OTP = require('../models/OTP');
+      const emergencyEmail = admin.emergencyApproverEmail || process.env.EMERGENCY_APPROVER_EMAIL;
+
+      const otpDoc = await OTP.findOne({ email: emergencyEmail.toLowerCase(), purpose: 'emergency' }).sort({ createdAt: -1 });
+      if (!otpDoc) {
+        return res.status(400).json({ message: 'No active OTP found. Please request a verification code first.' });
+      }
+
+      const isMatch = await otpDoc.compareOTP(otp);
+      if (!isMatch) {
+        otpDoc.failedAttempts = (otpDoc.failedAttempts || 0) + 1;
+        if (otpDoc.failedAttempts >= 3) {
+          await OTP.deleteOne({ _id: otpDoc._id });
+          return res.status(400).json({ message: 'Verification failed. Maximum attempts reached. Please request a new code.' });
+        }
+        await otpDoc.save();
+        return res.status(400).json({ message: `Incorrect verification code. ${3 - otpDoc.failedAttempts} attempts remaining.` });
+      }
+
+      // Valid OTP, consume it
+      await OTP.deleteMany({ email: emergencyEmail.toLowerCase(), purpose: 'emergency' });
+    }
+
+    // Apply settings updates
+    if (email) {
+      // Check if email already in use
+      if (email.toLowerCase() !== admin.email.toLowerCase()) {
+        const emailExists = await Admin.findOne({ email: email.toLowerCase() });
+        if (emailExists) return res.status(400).json({ message: 'Email address already in use by another admin' });
+        admin.email = email.toLowerCase();
+      }
+    }
+    if (phone !== undefined) admin.phone = phone;
+    if (otpEnabled !== undefined) admin.otpEnabled = otpEnabled;
+    if (emergencyApproverEmail) admin.emergencyApproverEmail = emergencyApproverEmail.toLowerCase();
+    if (maintenanceMode !== undefined) admin.maintenanceMode = maintenanceMode;
+    if (maintenanceMessage !== undefined) admin.maintenanceMessage = maintenanceMessage;
+
+    await admin.save();
+
+    res.status(200).json({
+      message: 'Settings updated successfully',
+      settings: {
+        email: admin.email,
+        phone: admin.phone,
+        otpEnabled: admin.otpEnabled,
+        emergencyApproverEmail: admin.emergencyApproverEmail,
+        maintenanceMode: admin.maintenanceMode,
+        maintenanceMessage: admin.maintenanceMessage
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Change Password (requires current password validation)
+exports.changePassword = async (req, res, next) => {
+  try {
+    const admin = await Admin.findById(req.admin._id).select('+password');
+    const { currentPassword, newPassword } = req.body;
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ message: 'Please provide both current and new password' });
+    }
+
+    const isMatch = await admin.comparePassword(currentPassword);
+    if (!isMatch) {
+      return res.status(400).json({ message: 'Incorrect current password' });
+    }
+
+    admin.password = newPassword;
+    await admin.save();
+
+    res.status(200).json({ message: 'Password changed successfully' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Revoke session/device
+exports.revokeSession = async (req, res, next) => {
+  try {
+    const { sessionId } = req.body;
+    const admin = req.admin;
+
+    admin.activeDevices = admin.activeDevices.filter(d => d._id.toString() !== sessionId);
+    await admin.save();
+
+    res.status(200).json({ message: 'Device session revoked successfully' });
   } catch (error) {
     next(error);
   }

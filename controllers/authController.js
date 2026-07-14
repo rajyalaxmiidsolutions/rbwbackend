@@ -210,6 +210,23 @@ exports.resetPassword = async (req, res, next) => {
 // Logout
 exports.logout = async (req, res, next) => {
   try {
+    const token = req.cookies?.token || req.header('Authorization')?.replace('Bearer ', '');
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        if (decoded.role === 'admin' || decoded.role === 'superadmin') {
+          const Admin = require('../models/Admin');
+          const admin = await Admin.findById(decoded.id);
+          if (admin) {
+            admin.activeDevices = admin.activeDevices.filter(d => d.token !== token);
+            await admin.save();
+          }
+        }
+      } catch (err) {
+        // Suppress decode issues on logout
+      }
+    }
+
     res.cookie('token', '', {
       httpOnly: true,
       expires: new Date(0),

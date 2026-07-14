@@ -8,10 +8,18 @@ const admin = require('../controllers/adminController');
 // Public
 router.post('/login', authLimiter, admin.login);
 router.post('/seed', admin.seedAdmin);
+router.get('/store-status', admin.getStoreStatus);
 
 // Protected
 router.use(adminAuth);
 router.get('/dashboard', admin.getDashboard);
+
+// Settings & Security
+router.get('/settings', admin.getSettings);
+router.put('/settings', admin.updateSettings);
+router.post('/change-password', admin.changePassword);
+router.post('/request-emergency-otp', admin.requestEmergencyOTP);
+router.post('/revoke-session', admin.revokeSession);
 
 // Products
 router.get('/products', admin.getAllProducts);

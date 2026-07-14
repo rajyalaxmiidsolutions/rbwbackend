@@ -20,6 +20,16 @@ const adminAuth = async (req, res, next) => {
       return res.status(401).json({ message: 'Admin not found' });
     }
 
+    // Check if the token is registered as an active device session
+    const sessionIndex = admin.activeDevices.findIndex(d => d.token === token);
+    if (sessionIndex === -1) {
+      return res.status(401).json({ message: 'Session expired or revoked' });
+    }
+
+    // Update session activity time
+    admin.activeDevices[sessionIndex].lastActive = new Date();
+    await admin.save();
+
     req.admin = admin;
     next();
   } catch (error) {
