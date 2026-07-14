@@ -27,8 +27,17 @@ const errorHandler = (err, req, res, next) => {
     return res.status(400).json({ message: 'Invalid ID format' });
   }
 
+  let errorMessage = err.message || 'Internal Server Error';
+
+  // Handle Razorpay API errors
+  if (err.error && typeof err.error === 'object' && err.error.description) {
+    errorMessage = `Razorpay: ${err.error.description}`;
+  } else if (err.description) {
+    errorMessage = `Razorpay: ${err.description}`;
+  }
+
   res.status(err.statusCode || 500).json({
-    message: err.message || 'Internal Server Error',
+    message: errorMessage,
     stack: err.stack,
     error: err
   });
