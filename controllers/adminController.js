@@ -1024,7 +1024,7 @@ exports.getSettings = async (req, res, next) => {
   }
 };
 
-// Send OTP to registered Emergency Approver
+// Send OTP to registered Emergency Approver and Boss Admin
 exports.requestEmergencyOTP = async (req, res, next) => {
   try {
     const admin = req.admin;
@@ -1036,26 +1036,42 @@ exports.requestEmergencyOTP = async (req, res, next) => {
     const OTP = require('../models/OTP');
     const { sendOTPEmail } = require('../utils/sendEmail');
 
-    // Generate 6 digit numeric code
+    // Generate 6 digit numeric code for Emergency Approver
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    // Generate 6 digit numeric code for Boss Admin (previous admin email)
+    const adminOtp = Math.floor(100000 + Math.random() * 900000).toString();
 
     // Check cooldown/rate limits
-    const existing = await OTP.findOne({ email: emergencyEmail.toLowerCase(), purpose: 'emergency' }).sort({ createdAt: -1 });
-    if (existing && (Date.now() - new Date(existing.createdAt).getTime() < 60000)) {
+    const existingEmergency = await OTP.findOne({ email: emergencyEmail.toLowerCase(), purpose: 'emergency' }).sort({ createdAt: -1 });
+    const existingAdmin = await OTP.findOne({ email: admin.email.toLowerCase(), purpose: 'emergency_admin' }).sort({ createdAt: -1 });
+    
+    if ((existingEmergency && (Date.now() - new Date(existingEmergency.createdAt).getTime() < 60000)) ||
+        (existingAdmin && (Date.now() - new Date(existingAdmin.createdAt).getTime() < 60000))) {
       return res.status(400).json({ message: 'Please wait 60 seconds before requesting another OTP.' });
     }
 
-    // Save/refresh OTP
+    // Save/refresh Emergency Approver OTP
     await OTP.deleteMany({ email: emergencyEmail.toLowerCase(), purpose: 'emergency' });
     await OTP.create({
       email: emergencyEmail.toLowerCase(),
       otp,
       purpose: 'emergency',
-      expiresAt: new Date(Date.now() + 5 * 60 * 1000) // 5 minutes expiration
+      expiresAt: new Date(Date.now() + 5 * 60 * 1000)
+    });
+
+    // Save/refresh Boss Admin OTP
+    await OTP.deleteMany({ email: admin.email.toLowerCase(), purpose: 'emergency_admin' });
+    await OTP.create({
+      email: admin.email.toLowerCase(),
+      otp: adminOtp,
+      purpose: 'emergency_admin',
+      expiresAt: new Date(Date.now() + 5 * 60 * 1000)
     });
 
     await sendOTPEmail(emergencyEmail, otp, 'emergency');
-    res.status(200).json({ message: `Verification code successfully sent to Emergency Approver` });
+    await sendOTPEmail(admin.email, adminOtp, 'emergency_admin');
+
+    res.status(200).json({ message: `Verification codes successfully sent to Emergency Approver and Boss Admin` });
   } catch (error) {
     next(error);
   }
@@ -1065,7 +1081,7 @@ exports.requestEmergencyOTP = async (req, res, next) => {
 exports.updateSettings = async (req, res, next) => {
   try {
     const admin = req.admin;
-    const { email, phone, otpEnabled, emergencyApproverEmail, maintenanceMode, maintenanceMessage, otp } = req.body;
+    const { email, phone, otpEnabled, emergencyApproverEmail, maintenanceMode, maintenanceMessage, otp, adminOtp, bossCode } = req.body;
 
     const criticalChanges = [];
     if (email && email.toLowerCase() !== admin.email.toLowerCase()) criticalChanges.push('email');
@@ -1073,33 +1089,67 @@ exports.updateSettings = async (req, res, next) => {
     if (otpEnabled !== undefined && otpEnabled !== admin.otpEnabled) criticalChanges.push('otpEnabled');
     if (emergencyApproverEmail && emergencyApproverEmail.toLowerCase() !== (admin.emergencyApproverEmail || '').toLowerCase()) criticalChanges.push('emergencyApproverEmail');
 
-    // Enforce Emergency Approver OTP check on backend
+    // Enforce Emergency Approver OTP + Boss Admin OTP + Boss Code check on backend
     if (criticalChanges.length > 0) {
-      if (!otp) {
-        return res.status(400).json({ message: 'Emergency Approval OTP is required to save these changes.', otpRequired: true });
+      if (!otp || !adminOtp || !bossCode) {
+        return res.status(400).json({ 
+          message: 'Boss Code and OTP verifications (from both Emergency Approver and current Admin) are required to save these changes.', 
+          otpRequired: true 
+        });
+      }
+
+      // 1. Verify Boss Code
+      const envBossCode = process.env.BOSS_CODE || 'JUNNU00381';
+      if (bossCode.trim() !== envBossCode.trim()) {
+        return res.status(400).json({ message: 'Invalid Boss Code.' });
       }
 
       const OTP = require('../models/OTP');
       const emergencyEmail = admin.emergencyApproverEmail || process.env.EMERGENCY_APPROVER_EMAIL;
 
+      // 2. Fetch both OTP documents
       const otpDoc = await OTP.findOne({ email: emergencyEmail.toLowerCase(), purpose: 'emergency' }).sort({ createdAt: -1 });
-      if (!otpDoc) {
-        return res.status(400).json({ message: 'No active OTP found. Please request a verification code first.' });
+      const adminOtpDoc = await OTP.findOne({ email: admin.email.toLowerCase(), purpose: 'emergency_admin' }).sort({ createdAt: -1 });
+
+      if (!otpDoc || !adminOtpDoc) {
+        return res.status(400).json({ message: 'Active OTP verification codes not found. Please request new codes.' });
       }
 
-      const isMatch = await otpDoc.compareOTP(otp);
-      if (!isMatch) {
+      // 3. Verify Emergency Approver OTP
+      const isMatchEmergency = await otpDoc.compareOTP(otp);
+      if (!isMatchEmergency) {
         otpDoc.failedAttempts = (otpDoc.failedAttempts || 0) + 1;
         if (otpDoc.failedAttempts >= 3) {
-          await OTP.deleteOne({ _id: otpDoc._id });
-          return res.status(400).json({ message: 'Verification failed. Maximum attempts reached. Please request a new code.' });
+          await Promise.all([
+            OTP.deleteOne({ _id: otpDoc._id }),
+            OTP.deleteOne({ _id: adminOtpDoc._id })
+          ]);
+          return res.status(400).json({ message: 'Emergency Approver code verification failed. Maximum attempts reached. Please request new codes.' });
         }
         await otpDoc.save();
-        return res.status(400).json({ message: `Incorrect verification code. ${3 - otpDoc.failedAttempts} attempts remaining.` });
+        return res.status(400).json({ message: `Incorrect Emergency Approver code. ${3 - otpDoc.failedAttempts} attempts remaining.` });
       }
 
-      // Valid OTP, consume it
-      await OTP.deleteMany({ email: emergencyEmail.toLowerCase(), purpose: 'emergency' });
+      // 4. Verify Boss Admin OTP
+      const isMatchAdmin = await adminOtpDoc.compareOTP(adminOtp);
+      if (!isMatchAdmin) {
+        adminOtpDoc.failedAttempts = (adminOtpDoc.failedAttempts || 0) + 1;
+        if (adminOtpDoc.failedAttempts >= 3) {
+          await Promise.all([
+            OTP.deleteOne({ _id: otpDoc._id }),
+            OTP.deleteOne({ _id: adminOtpDoc._id })
+          ]);
+          return res.status(400).json({ message: 'Admin code verification failed. Maximum attempts reached. Please request new codes.' });
+        }
+        await adminOtpDoc.save();
+        return res.status(400).json({ message: `Incorrect Boss Admin code. ${3 - adminOtpDoc.failedAttempts} attempts remaining.` });
+      }
+
+      // Valid OTPs, consume both
+      await Promise.all([
+        OTP.deleteMany({ email: emergencyEmail.toLowerCase(), purpose: 'emergency' }),
+        OTP.deleteMany({ email: admin.email.toLowerCase(), purpose: 'emergency_admin' })
+      ]);
     }
 
     // Apply settings updates

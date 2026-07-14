@@ -144,6 +144,8 @@ const sendOTPEmail = async (email, otp, purpose) => {
     ? 'Verify Your Email — Rajyalaxmi Binding Works'
     : purpose === 'emergency'
     ? 'Emergency Approval OTP — Rajyalaxmi Binding Works'
+    : purpose === 'emergency_admin'
+    ? 'Boss Admin Security OTP — Rajyalaxmi Binding Works'
     : 'Reset Your Password — Rajyalaxmi Binding Works';
 
   const html = `
@@ -153,13 +155,15 @@ const sendOTPEmail = async (email, otp, purpose) => {
       </div>
       <div style="background: #F8F8F8; border-radius: 18px; padding: 32px; text-align: center;">
         <h2 style="color: #222222; font-size: 20px; margin: 0 0 8px;">
-          ${purpose === 'verification' ? 'Email Verification' : purpose === 'emergency' ? 'Emergency Approval Required' : 'Password Reset'}
+          ${purpose === 'verification' ? 'Email Verification' : purpose === 'emergency' ? 'Emergency Approval Required' : purpose === 'emergency_admin' ? 'Admin Security Verification' : 'Password Reset'}
         </h2>
         <p style="color: #666; font-size: 14px; margin: 0 0 24px;">
           ${purpose === 'verification'
       ? 'Use the OTP below to verify your email address.'
       : purpose === 'emergency'
       ? 'Use the OTP below to approve the critical settings modification request.'
+      : purpose === 'emergency_admin'
+      ? 'Use the OTP below to verify and authorize settings modification from your admin account.'
       : 'Use the OTP below to reset your password.'}
         </p>
         <div style="background: #6D0F1A; color: #FFFFFF; font-size: 32px; font-weight: 700; letter-spacing: 8px; padding: 16px 32px; border-radius: 12px; display: inline-block;">
