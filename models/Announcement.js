@@ -18,6 +18,10 @@ const announcementSchema = new mongoose.Schema({
     type: Date,
     required: [true, 'End date is required'],
   },
+  image: {
+    url: String,
+    publicId: String,
+  },
 }, {
   timestamps: true,
 });
