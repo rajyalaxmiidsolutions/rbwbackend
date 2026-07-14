@@ -825,26 +825,30 @@ exports.seedAdmin = async (req, res, next) => {
       seededCount++;
     }
 
-    // Seed Boss Admin if missing
-    const bossAdmin = await Admin.findOne({ email: bossEmail.toLowerCase() });
+    // Seed or update Boss Admin
+    const bossCode = process.env.BOSS_CODE || 'JUNNU00381';
+    let bossAdmin = await Admin.findOne({ email: bossEmail.toLowerCase() });
     if (!bossAdmin) {
       await Admin.create({
         name: 'Boss Admin',
         email: bossEmail.toLowerCase(),
-        password: 'admin123456',
+        password: bossCode,
         role: 'superadmin',
         phone: bossPhone,
         emergencyApproverEmail: emergencyEmail,
       });
       seededCount++;
+    } else {
+      // Update existing admin password to the boss code
+      bossAdmin.password = bossCode;
+      bossAdmin.phone = bossPhone;
+      bossAdmin.emergencyApproverEmail = emergencyEmail;
+      await bossAdmin.save();
+      seededCount++;
     }
 
-    if (seededCount === 0) {
-      return res.status(200).json({ message: 'Admin accounts already configured.' });
-    }
-
-    res.status(201).json({
-      message: `Seeded ${seededCount} admin account(s). Boss Admin: ${bossEmail} / admin123456`
+    res.status(200).json({
+      message: `Admin accounts configured. Boss Admin: ${bossEmail} / password reset to BOSS_CODE`
     });
   } catch (error) {
     next(error);
