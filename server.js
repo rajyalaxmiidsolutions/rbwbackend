@@ -28,11 +28,18 @@ const app = express();
 
 // Security middleware
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
-const allowedOrigins = [
+let allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:3000',
   process.env.FRONTEND_URL
 ].filter(Boolean);
+
+if (process.env.FRONTEND_URL) {
+  const trimmed = process.env.FRONTEND_URL.replace(/\/$/, '');
+  if (!allowedOrigins.includes(trimmed)) {
+    allowedOrigins.push(trimmed);
+  }
+}
 
 app.use(cors({
   origin: allowedOrigins,
