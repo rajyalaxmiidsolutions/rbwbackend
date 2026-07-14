@@ -117,10 +117,13 @@ exports.sendCustomNotification = async (req, res, next) => {
 // Get subscribers count (Admin only)
 exports.getPushStats = async (req, res, next) => {
   try {
+    const User = require('../models/User');
+    const registeredCustomers = await User.countDocuments();
     const customerCount = await PushSubscription.countDocuments({ role: 'customer', isActive: true });
     const adminCount = await PushSubscription.countDocuments({ role: 'admin', isActive: true });
 
     res.status(200).json({
+      registeredCustomers,
       customers: customerCount,
       admins: adminCount,
       total: customerCount + adminCount
