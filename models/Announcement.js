@@ -1,22 +1,22 @@
 const mongoose = require('mongoose');
 
 const announcementSchema = new mongoose.Schema({
-  text: {
+  message: {
     type: String,
-    required: [true, 'Announcement text is required'],
+    required: [true, 'Announcement message is required'],
     trim: true,
   },
-  textColor: {
-    type: String,
-    default: '#ffffff',
+  displayPages: {
+    type: [String],
+    default: [],
   },
-  bgColor: {
-    type: String,
-    default: '#800020', // Burgundy
+  startDate: {
+    type: Date,
+    required: [true, 'Start date is required'],
   },
-  isActive: {
-    type: Boolean,
-    default: true,
+  endDate: {
+    type: Date,
+    required: [true, 'End date is required'],
   },
 }, {
   timestamps: true,

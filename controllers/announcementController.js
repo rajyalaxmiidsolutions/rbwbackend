@@ -1,9 +1,13 @@
 const Announcement = require('../models/Announcement');
 
-// Public: Get all active announcements
+// Public: Get all active announcements (current date is between startDate and endDate)
 exports.getActiveAnnouncements = async (req, res, next) => {
   try {
-    const announcements = await Announcement.find({ isActive: true }).sort({ createdAt: -1 });
+    const now = new Date();
+    const announcements = await Announcement.find({
+      startDate: { $lte: now },
+      endDate: { $gte: now }
+    }).sort({ createdAt: -1 });
     res.status(200).json(announcements);
   } catch (error) {
     next(error);
@@ -23,8 +27,13 @@ exports.getAllAnnouncements = async (req, res, next) => {
 // Admin: Create announcement
 exports.createAnnouncement = async (req, res, next) => {
   try {
-    const { text, textColor, bgColor, isActive } = req.body;
-    const announcement = await Announcement.create({ text, textColor, bgColor, isActive });
+    const { message, displayPages, startDate, endDate } = req.body;
+    const announcement = await Announcement.create({
+      message,
+      displayPages,
+      startDate,
+      endDate
+    });
     res.status(201).json(announcement);
   } catch (error) {
     next(error);
@@ -34,10 +43,10 @@ exports.createAnnouncement = async (req, res, next) => {
 // Admin: Update announcement
 exports.updateAnnouncement = async (req, res, next) => {
   try {
-    const { text, textColor, bgColor, isActive } = req.body;
+    const { message, displayPages, startDate, endDate } = req.body;
     const announcement = await Announcement.findByIdAndUpdate(
       req.params.id,
-      { text, textColor, bgColor, isActive },
+      { message, displayPages, startDate, endDate },
       { new: true, runValidators: true }
     );
     if (!announcement) {

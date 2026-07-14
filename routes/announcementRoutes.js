@@ -11,6 +11,7 @@ const {
 
 // Public route
 router.get('/active', getActiveAnnouncements);
+router.get('/public-all', getAllAnnouncements);
 
 // Protected admin routes
 router.use(adminAuth);
