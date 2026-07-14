@@ -60,6 +60,7 @@ app.use('/api/cart', cartRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/admin/announcements', announcementRoutes);
 app.use('/api/announcements', announcementRoutes);
 
 // Public routes for locations (customer checkout) and testimonials (homepage)
