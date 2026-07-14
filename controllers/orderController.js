@@ -139,6 +139,20 @@ exports.verifyPayment = async (req, res, next) => {
       console.error('Admin order placement notification email failed:', emailErr.message);
     }
 
+    // Send admin push notification
+    try {
+      const pushService = require('../utils/pushService');
+      const adminPayload = {
+        title: '💰 New Order Received',
+        body: `Order #${order._id.toString().slice(-6).toUpperCase()} of ₹${order.totalPrice} from ${order.shippingAddress.name || 'Customer'}.`,
+        icon: '/favicon.ico',
+        url: '/admin/orders'
+      };
+      pushService.sendToAdmins(adminPayload).catch(err => console.error("Admin push notification failed:", err));
+    } catch (pushErr) {
+      console.error("Push service initialization or call error:", pushErr.message);
+    }
+
     res.status(200).json({ message: 'Payment verified successfully', order });
   } catch (error) {
     next(error);

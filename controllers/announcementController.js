@@ -54,6 +54,17 @@ exports.createAnnouncement = async (req, res, next) => {
       endDate,
       image
     });
+
+    // Send push notification to all customers
+    const pushService = require('../utils/pushService');
+    const payload = {
+      title: '📢 New Announcement from RBW',
+      body: message,
+      icon: '/favicon.ico',
+      url: '/updates' // opens the updates page on click
+    };
+    pushService.sendToAllCustomers(payload).catch(err => console.error("Error sending push for announcement:", err));
+
     res.status(201).json(announcement);
   } catch (error) {
     next(error);

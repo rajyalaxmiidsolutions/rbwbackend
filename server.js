@@ -18,6 +18,8 @@ const orderRoutes = require('./routes/orderRoutes');
 const userRoutes = require('./routes/userRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const announcementRoutes = require('./routes/announcementRoutes');
+const pushRoutes = require('./routes/pushRoutes');
+const cookieParser = require('cookie-parser');
 
 // Models for public routes
 const Location = require('./models/Location');
@@ -46,11 +48,12 @@ app.use(cors({
   credentials: true,
 }));
 app.use(mongoSanitize());
+app.use(cookieParser());
 app.use(generalLimiter);
 
 // Body parsing
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(express.json({ limit: '100kb' }));
+app.use(express.urlencoded({ extended: true, limit: '100kb' }));
 
 // API Routes
 app.use('/api/auth', authRoutes);
@@ -62,6 +65,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/admin/announcements', announcementRoutes);
 app.use('/api/announcements', announcementRoutes);
+app.use('/api/push', pushRoutes);
 
 // Public routes for locations (customer checkout) and testimonials (homepage)
 app.get('/api/locations', async (req, res) => {

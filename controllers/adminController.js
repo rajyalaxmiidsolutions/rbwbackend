@@ -26,6 +26,15 @@ exports.login = async (req, res, next) => {
     }
 
     const token = generateToken(admin._id, admin.role);
+
+    // Set secure httpOnly cookie
+    res.cookie('token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+    });
+
     res.status(200).json({ token, admin: { _id: admin._id, name: admin.name, email: admin.email, role: admin.role } });
   } catch (error) {
     next(error);
@@ -525,6 +534,44 @@ exports.updateOrderStatus = async (req, res, next) => {
     await order.save();
 
     await order.populate('user', 'name email');
+
+    // Send customer push notification for status update
+    try {
+      const pushService = require('../utils/pushService');
+      const orderShortId = order._id.toString().slice(-6).toUpperCase();
+      let payload = null;
+
+      if (orderStatus === 'Confirmed') {
+        payload = {
+          title: 'Order Confirmed! ✅',
+          body: `Your order #${orderShortId} has been confirmed. We are processing it.`,
+          icon: '/favicon.ico',
+          url: '/orders'
+        };
+      } else if (orderStatus === 'Shipped') {
+        const tracking = order.deliveryInfo?.trackingNumber ? ` (Tracking: ${order.deliveryInfo.trackingNumber})` : '';
+        payload = {
+          title: 'Order Shipped! 🚚',
+          body: `Your order #${orderShortId} has been shipped!${tracking}`,
+          icon: '/favicon.ico',
+          url: '/orders'
+        };
+      } else if (orderStatus === 'Delivered') {
+        payload = {
+          title: 'Order Delivered! 🎉',
+          body: `Your order #${orderShortId} has been delivered. Thank you!`,
+          icon: '/favicon.ico',
+          url: '/orders'
+        };
+      }
+
+      if (payload) {
+        pushService.sendToUser(order.user._id, payload).catch(err => console.error("Customer push notification failed:", err));
+      }
+    } catch (pushErr) {
+      console.error("Push notification error in updateOrderStatus:", pushErr.message);
+    }
+
     res.status(200).json(order);
   } catch (error) {
     next(error);
@@ -744,6 +791,21 @@ exports.deliverAndNotifyOrder = async (req, res, next) => {
     order.deliveredAt = new Date();
     order.deliveryInfoEditCount = 0;
     await order.save();
+
+    // Send customer push notification for delivery
+    try {
+      const pushService = require('../utils/pushService');
+      const orderShortId = order._id.toString().slice(-6).toUpperCase();
+      const payload = {
+        title: 'Order Delivered! 🎉',
+        body: `Your order #${orderShortId} has been delivered. Thank you!`,
+        icon: '/favicon.ico',
+        url: '/orders'
+      };
+      pushService.sendToUser(order.user, payload).catch(err => console.error("Customer push notification failed:", err));
+    } catch (pushErr) {
+      console.error("Push notification error in deliverAndNotifyOrder:", pushErr.message);
+    }
 
     // Generate Invoice PDF
     let pdfBuffer;

@@ -35,6 +35,14 @@ exports.verifyOTP = async (req, res, next) => {
 
     const token = generateToken(user._id);
 
+    // Set secure httpOnly cookie
+    res.cookie('token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax', // Use lax to support redirect flows if any
+      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+    });
+
     res.status(200).json({
       message: 'Email verified successfully',
       token,
@@ -118,6 +126,14 @@ exports.login = async (req, res, next) => {
 
     const token = generateToken(user._id);
 
+    // Set secure httpOnly cookie
+    res.cookie('token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+    });
+
     res.status(200).json({
       token,
       user: {
@@ -186,6 +202,21 @@ exports.resetPassword = async (req, res, next) => {
     await OTP.deleteMany({ email, purpose: 'reset' });
 
     res.status(200).json({ message: 'Password reset successful. Please login.' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Logout
+exports.logout = async (req, res, next) => {
+  try {
+    res.cookie('token', '', {
+      httpOnly: true,
+      expires: new Date(0),
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax'
+    });
+    res.status(200).json({ message: 'Logged out successfully' });
   } catch (error) {
     next(error);
   }
