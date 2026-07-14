@@ -117,6 +117,7 @@ app.get('/api/health', (req, res) => {
     emailPassDefined: !!process.env.EMAIL_PASS,
     brevoApiKeyDefined: !!process.env.BREVO_API_KEY,
     resendApiKeyDefined: !!process.env.RESEND_API_KEY,
+    vapidKeysDefined: !!process.env.VAPID_PUBLIC_KEY && !!process.env.VAPID_PRIVATE_KEY,
     timestamp: new Date().toISOString()
   });
 });
