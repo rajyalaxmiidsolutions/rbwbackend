@@ -89,6 +89,7 @@ exports.placeOrder = async (req, res, next) => {
       message: 'Razorpay order created',
       order,
       razorpayOrder,
+      razorpayKeyId: process.env.RAZORPAY_KEY_ID,
     });
   } catch (error) {
     next(error);
