@@ -121,27 +121,6 @@ exports.verifyPayment = async (req, res, next) => {
       });
     }
 
-    // Send order received email
-    try {
-      await sendOrderReceivedEmail(order.shippingAddress.email, order);
-    } catch (emailErr) {
-      console.error('Order received email failed:', emailErr.message);
-    }
-
-    // Send admin order notification email
-    try {
-      const admins = await Admin.find({}, 'email');
-      const adminEmails = admins.map(a => a.email);
-      if (adminEmails.length === 0) {
-        adminEmails.push(process.env.EMAIL_USER);
-      }
-      for (const email of adminEmails) {
-        await sendAdminOrderPlacedEmail(email, order);
-      }
-    } catch (emailErr) {
-      console.error('Admin order placement notification email failed:', emailErr.message);
-    }
-
     // Send admin push notification
     try {
       const pushService = require('../utils/pushService');

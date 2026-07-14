@@ -559,7 +559,7 @@ exports.updateOrderStatus = async (req, res, next) => {
       } else if (orderStatus === 'Delivered') {
         payload = {
           title: 'Order Delivered! 🎉',
-          body: `Your order #${orderShortId} has been delivered. Thank you!`,
+          body: `Your order #${orderShortId} has been delivered. Delivery details and bill are attached in the track order section.`,
           icon: '/favicon.ico',
           url: '/orders'
         };
@@ -609,6 +609,21 @@ exports.updateDeliveryInfo = async (req, res, next) => {
       trackingNumber: trackingNumber || order.deliveryInfo?.trackingNumber || '',
     };
     await order.save();
+
+    // Send customer push notification for delivery info changes/updates
+    try {
+      const pushService = require('../utils/pushService');
+      const orderShortId = order._id.toString().slice(-6).toUpperCase();
+      const payload = {
+        title: 'Delivery Details Updated 📍',
+        body: `Delivery details for order #${orderShortId} have been updated. View them in the track order section.`,
+        icon: '/favicon.ico',
+        url: '/orders'
+      };
+      pushService.sendToUser(order.user, payload).catch(err => console.error("Customer delivery update push notification failed:", err));
+    } catch (pushErr) {
+      console.error("Push notification error in updateDeliveryInfo:", pushErr.message);
+    }
 
     res.status(200).json({ message: 'Delivery info updated', order });
   } catch (error) {
@@ -798,7 +813,7 @@ exports.deliverAndNotifyOrder = async (req, res, next) => {
       const orderShortId = order._id.toString().slice(-6).toUpperCase();
       const payload = {
         title: 'Order Delivered! 🎉',
-        body: `Your order #${orderShortId} has been delivered. Thank you!`,
+        body: `Your order #${orderShortId} has been delivered. Delivery details and bill are attached in the track order section.`,
         icon: '/favicon.ico',
         url: '/orders'
       };
