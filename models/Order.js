@@ -91,6 +91,13 @@ const orderSchema = new mongoose.Schema({
     type: deliveryInfoSchema,
     default: () => ({}),
   },
+  deliveredAt: {
+    type: Date,
+  },
+  deliveryInfoEditCount: {
+    type: Number,
+    default: 0,
+  },
 }, {
   timestamps: true,
 });

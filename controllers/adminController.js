@@ -514,13 +514,17 @@ exports.getAllOrders = async (req, res, next) => {
 exports.updateOrderStatus = async (req, res, next) => {
   try {
     const { orderStatus } = req.body;
-    const order = await Order.findByIdAndUpdate(
-      req.params.id,
-      { orderStatus },
-      { new: true }
-    ).populate('user', 'name email');
-
+    const order = await Order.findById(req.params.id);
     if (!order) return res.status(404).json({ message: 'Order not found' });
+
+    order.orderStatus = orderStatus;
+    if (orderStatus === 'Delivered') {
+      order.deliveredAt = new Date();
+      order.deliveryInfoEditCount = 0;
+    }
+    await order.save();
+
+    await order.populate('user', 'name email');
     res.status(200).json(order);
   } catch (error) {
     next(error);
@@ -535,9 +539,19 @@ exports.updateDeliveryInfo = async (req, res, next) => {
     const order = await Order.findById(req.params.id);
     if (!order) return res.status(404).json({ message: 'Order not found' });
 
-    const allowedStatuses = ['Paid', 'Confirmed', 'Shipped'];
+    const allowedStatuses = ['Paid', 'Confirmed', 'Shipped', 'Delivered'];
     if (!allowedStatuses.includes(order.orderStatus)) {
-      return res.status(400).json({ message: 'Can only update delivery info for paid/confirmed/shipped orders' });
+      return res.status(400).json({ message: 'Can only update delivery info for paid/confirmed/shipped/delivered orders' });
+    }
+
+    if (order.orderStatus === 'Delivered') {
+      if (order.deliveredAt && (Date.now() - new Date(order.deliveredAt).getTime()) > 2 * 60 * 60 * 1000) {
+        return res.status(400).json({ message: 'Edit window expired (2 hours after delivery)' });
+      }
+      if (order.deliveryInfoEditCount >= 2) {
+        return res.status(400).json({ message: 'Edit limit reached (max 2 edits after delivery)' });
+      }
+      order.deliveryInfoEditCount = (order.deliveryInfoEditCount || 0) + 1;
     }
 
     order.deliveryInfo = {
@@ -727,6 +741,8 @@ exports.deliverAndNotifyOrder = async (req, res, next) => {
       trackingNumber: trackingNumber || order.deliveryInfo?.trackingNumber || '',
     };
     order.orderStatus = 'Delivered';
+    order.deliveredAt = new Date();
+    order.deliveryInfoEditCount = 0;
     await order.save();
 
     // Generate Invoice PDF
